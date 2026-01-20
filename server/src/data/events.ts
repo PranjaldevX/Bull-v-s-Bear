@@ -1,0 +1,177 @@
+import { MarketEvent, Asset } from '@bvb/shared';
+
+export interface ServerMarketEvent extends MarketEvent {
+    effect: (assets: Asset[]) => void;
+}
+
+export const MARKET_EVENTS: ServerMarketEvent[] = [
+    {
+        id: 'tech-earnings',
+        title: 'Tech Earnings Smash Expectations',
+        description: 'Tech stocks soar as earnings crush expectations!',
+        affectedAssets: ['tech-growth'],
+        sentiment: 'positive',
+        intensity: 'medium',
+        tags: ['earnings', 'tech'],
+        impact: { 'STOCK': 0.12 },
+        duration: 2,
+        hint: 'Momentum traders love this.',
+        emoji: '🟢📈',
+        effect: (assets) => { /* handled dynamically now, but keeping for type compat if needed */ }
+    },
+    {
+        id: 'crypto-adoption',
+        title: 'Major Crypto Adoption by Global Bank',
+        description: 'Hype builds fast here.',
+        affectedAssets: ['btc-coin', 'meme-coin'],
+        sentiment: 'positive',
+        intensity: 'high',
+        tags: ['crypto', 'adoption'],
+        impact: { 'CRYPTO': 0.10 },
+        duration: 1,
+        hint: 'Hype builds fast here.',
+        emoji: '🤯🚀',
+        effect: () => { }
+    },
+    {
+        id: 'green-energy',
+        title: 'Government Invests in Green Energy',
+        description: 'ETFs steady but strong here.',
+        affectedAssets: ['sp500-etf'],
+        sentiment: 'positive',
+        intensity: 'medium',
+        tags: ['policy', 'energy'],
+        impact: { 'ETF': 0.05 },
+        duration: 2,
+        hint: 'Green energy tends to outperform here.',
+        emoji: '🟢📈',
+        effect: () => { }
+    },
+    {
+        id: 'inflation-fall',
+        title: 'Inflation Falls to 2% Target',
+        description: 'Safe + growth both win.',
+        affectedAssets: ['gov-bond', 'tech-growth'],
+        sentiment: 'positive',
+        intensity: 'medium',
+        tags: ['economy', 'inflation'],
+        impact: { 'BOND': 0.04, 'STOCK': 0.05 },
+        duration: 1,
+        hint: 'Safe + growth both win.',
+        emoji: '🟢📈',
+        effect: () => { }
+    },
+    {
+        id: 'rate-cut',
+        title: 'Interest Rates Cut by Central Bank',
+        description: 'Cheaper money → bullish.',
+        affectedAssets: ['tech-growth', 'gov-bond'],
+        sentiment: 'positive',
+        intensity: 'high',
+        tags: ['economy', 'rates'],
+        impact: { 'STOCK': 0.05, 'BOND': -0.03 },
+        duration: 1,
+        hint: 'Cheaper money → bullish.',
+        emoji: '🟢📈',
+        effect: () => { }
+    },
+    {
+        id: 'crypto-etf',
+        title: 'Crypto ETF Approved',
+        description: 'Rocket emojis go BRRR.',
+        affectedAssets: ['btc-coin'],
+        sentiment: 'positive',
+        intensity: 'high',
+        tags: ['crypto', 'regulation'],
+        impact: { 'CRYPTO': 0.15 },
+        duration: 1,
+        hint: 'Rocket emojis go BRRR.',
+        emoji: '🤯🚀',
+        effect: () => { }
+    },
+    {
+        id: 'battery-tech',
+        title: 'Breakthrough Battery Technology',
+        description: 'Long-term trend forming.',
+        affectedAssets: ['sp500-etf'],
+        sentiment: 'positive',
+        intensity: 'medium',
+        tags: ['tech', 'innovation'],
+        impact: { 'ETF': 0.08 },
+        duration: 2,
+        hint: 'Long-term trend forming.',
+        emoji: '🟢📈',
+        effect: () => { }
+    },
+    {
+        id: 'blue-chip-beat',
+        title: 'Blue-Chip Companies Beat Forecasts',
+        description: 'Safe rally.',
+        affectedAssets: ['tech-growth'],
+        sentiment: 'positive',
+        intensity: 'low',
+        tags: ['earnings'],
+        impact: { 'STOCK': 0.04 },
+        duration: 1,
+        hint: 'Safe rally.',
+        emoji: '🟢📈',
+        effect: () => { }
+    },
+    {
+        id: 'retail-fomo',
+        title: 'Retail Crypto Adoption Surge',
+        description: 'This is when FOMO hits.',
+        affectedAssets: ['btc-coin', 'meme-coin'],
+        sentiment: 'positive',
+        intensity: 'medium',
+        tags: ['crypto', 'sentiment'],
+        impact: { 'CRYPTO': 0.06 },
+        duration: 1,
+        hint: 'This is when FOMO hits.',
+        emoji: '🤯🚀',
+        effect: () => { }
+    },
+    {
+        id: 'safe-haven',
+        title: 'Safe-Haven Rush',
+        description: 'Fear outside = safety inside.',
+        affectedAssets: ['gov-bond'],
+        sentiment: 'neutral',
+        intensity: 'medium',
+        tags: ['fear', 'bonds'],
+        impact: { 'BOND': 0.03 },
+        duration: 2,
+        hint: 'Fear outside = safety inside.',
+        emoji: '🧊😌',
+        effect: () => { }
+    },
+    // Negative Events
+    {
+        id: 'crypto-hack',
+        title: 'Crypto Exchange Hacked',
+        description: 'Not all dips are worth buying.',
+        affectedAssets: ['btc-coin', 'meme-coin'],
+        sentiment: 'negative',
+        intensity: 'high',
+        tags: ['crypto', 'crime'],
+        impact: { 'CRYPTO': -0.15 },
+        duration: 2,
+        hint: 'Not all dips are worth buying.',
+        emoji: '🔴📉',
+        effect: () => { }
+    },
+    {
+        id: 'rate-hike-panic',
+        title: 'Surprise Rate Hike',
+        description: 'Market panic!',
+        affectedAssets: ['tech-growth', 'sp500-etf'],
+        sentiment: 'negative',
+        intensity: 'high',
+        tags: ['economy', 'rates'],
+        impact: { 'STOCK': -0.10, 'ETF': -0.05 },
+        duration: 2,
+        hint: 'Don\'t fight the Fed.',
+        emoji: '⚠😨',
+        effect: () => { }
+    }
+];
