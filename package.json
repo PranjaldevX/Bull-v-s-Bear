@@ -1,0 +1,12 @@
+{
+  "name": "bull-vs-bear-royale",
+  "private": true,
+  "workspaces": [
+    "client",
+    "server",
+    "shared"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspaces --if-present"
+  }
+}

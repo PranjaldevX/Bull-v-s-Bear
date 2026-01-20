@@ -1,0 +1,15 @@
+# Render Blueprint for Bull vs Bear Royale Backend
+services:
+  - type: web
+    name: bull-bear-server
+    env: node
+    region: oregon
+    plan: free
+    rootDir: .
+    buildCommand: npm install && cd server && npm run build
+    startCommand: cd server && npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: GEMINI_API_KEY
+        sync: false  # Set this manually in Render dashboard
