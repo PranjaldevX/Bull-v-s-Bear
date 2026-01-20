@@ -35,10 +35,10 @@ Fill in the following settings:
 | **Name** | `bull-vs-bear-server` (or any name you prefer) |
 | **Region** | Choose closest to you (e.g., Oregon, Frankfurt) |
 | **Branch** | `main` |
-| **Root Directory** | Leave empty (or use `server` if needed) |
+| **Root Directory** | `server` |
 | **Runtime** | `Node` |
-| **Build Command** | `cd server && npm install && npm run build` |
-| **Start Command** | `cd server && npm start` |
+| **Build Command** | `npm install && npm run build` |
+| **Start Command** | `npm start` |
 
 #### Environment Variables
 
@@ -78,11 +78,11 @@ Watch the logs in real-time:
 ```
 ==> Cloning from https://github.com/PranjaldevX/Bull-v-s-Bear...
 ==> Checking out commit...
-==> Running build command 'cd server && npm install && npm run build'...
+==> Running build command 'npm install && npm run build'...
 ==> Installing dependencies...
 ==> Building TypeScript...
 ==> Build successful!
-==> Starting service with 'cd server && npm start'...
+==> Starting service with 'npm start'...
 ==> Server running on port 10000
 ==> Your service is live! 🎉
 ```
@@ -112,8 +112,9 @@ services:
     env: node
     region: oregon
     plan: free
-    buildCommand: cd server && npm install && npm run build
-    startCommand: cd server && npm start
+    rootDir: server
+    buildCommand: npm install && npm run build
+    startCommand: npm start
     envVars:
       - key: NODE_ENV
         value: production
