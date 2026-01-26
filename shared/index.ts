@@ -27,6 +27,7 @@ export interface Transaction {
   totalValue: number;
   eventActive?: string;
   sentimentAtTime: number;
+  avgBuyPrice?: number; // For SELL transactions
 }
 
 export interface PowerUp {
@@ -135,6 +136,36 @@ export interface GameResult {
   insights: string[];
   playerSummary?: PlayerSummary;
   learningCards?: LearningCard[];
+  decisionReplay?: DecisionReplay;
+}
+
+export interface DecisionReplay {
+  hasReplay: boolean;
+  message: string;
+  tradeAnalyzed?: {
+    type: 'BUY' | 'SELL';
+    asset: string;
+    amount: number;
+    price: number;
+    round: number;
+  };
+  newsContext?: {
+    title: string;
+    sentiment: string;
+    appearedAt: number;
+  };
+  actualOutcome?: {
+    tradeTime: number;
+    profit: string;
+    profitPercent: string;
+  };
+  bestAlternative?: {
+    timing: number;
+    timeDifference: number;
+    price: number;
+    profit: number;
+    profitPercent: string;
+  };
 }
 
 export interface LearningCard {

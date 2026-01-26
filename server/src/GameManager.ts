@@ -4,14 +4,14 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 import { Server } from 'socket.io';
-import { GameState, PlayerState, ClientToServerEvents, ServerToClientEvents, AvatarId, StrategyId, GamePhase, PreMatchSubPhase, Scenario, AssetType } from '@bvb/shared';
+import { GameState, PlayerState, ClientToServerEvents, ServerToClientEvents, AvatarId, StrategyId, GamePhase, PreMatchSubPhase, Scenario, AssetType, Transaction } from '@bvb/shared';
 import { INITIAL_ASSETS } from './data/assets';
 import { AVATARS, STRATEGIES, SCENARIOS } from './data/gameData';
 import { NEWS_CARDS, NewsCard, newsCardToMarketEvent, getRandomNewsCard, SECTOR_TO_ASSETS } from './data/newsCards';
 
 const GAME_ROUNDS = 5;
-const ROUND_DURATION_MS = 35000;
-const TOTAL_FRAMES = 35;
+const ROUND_DURATION_MS = 30000;
+const TOTAL_FRAMES = 30;
 const STARTING_CASH = 10000;
 const NEWS_PHASE_SECONDS = 5;
 const SHOCK_WINDOW_SECONDS = 7; // First 7 seconds of trading = shock window
@@ -25,24 +25,24 @@ const SHOCK_WINDOW_SECONDS = 7; // First 7 seconds of trading = shock window
 //   ε = Random Noise (market unpredictability)
 
 const MARKET_DRIFT: Record<string, number> = {
-    'STOCK': 0.0015,    // +0.15% per second natural growth
-    'CRYPTO': 0.0005,   // +0.05% per second (more volatile, less predictable trend)
-    'BOND': 0.0002,     // +0.02% per second (stable)
-    'ETF': 0.0012       // +0.12% per second
+    'STOCK': 0.002,     // +0.2% per second natural growth (increased from 0.15%)
+    'CRYPTO': 0.001,    // +0.1% per second (increased from 0.05%)
+    'BOND': 0.0003,     // +0.03% per second (increased from 0.02%)
+    'ETF': 0.0015       // +0.15% per second (increased from 0.12%)
 };
 
 const VOLATILITY_FACTOR: Record<string, number> = {
-    'STOCK': 0.04,      // 4% impact weight
-    'CRYPTO': 0.08,     // 8% impact weight (more sensitive to news)
-    'BOND': 0.02,       // 2% impact weight (less sensitive)
-    'ETF': 0.03         // 3% impact weight
+    'STOCK': 0.06,      // 6% impact weight (increased from 4%)
+    'CRYPTO': 0.12,     // 12% impact weight (increased from 8%)
+    'BOND': 0.03,       // 3% impact weight (increased from 2%)
+    'ETF': 0.05         // 5% impact weight (increased from 3%)
 };
 
 const RANDOM_NOISE_RANGE: Record<string, number> = {
-    'STOCK': 0.008,     // ±0.8% random noise
-    'CRYPTO': 0.015,    // ±1.5% random noise
-    'BOND': 0.003,      // ±0.3% random noise
-    'ETF': 0.006        // ±0.6% random noise
+    'STOCK': 0.004,     // ±0.4% random noise (reduced from 0.8%)
+    'CRYPTO': 0.008,    // ±0.8% random noise (reduced from 1.5%)
+    'BOND': 0.002,      // ±0.2% random noise (reduced from 0.3%)
+    'ETF': 0.003        // ±0.3% random noise (reduced from 0.6%)
 };
 
 // ==================== SENTIMENT SCORE MAPPING ====================
@@ -98,6 +98,18 @@ export class GameManager {
     private consecutiveSameSentiment: number = 0;
     // Track news cards for each round for AI analysis
     private roundNewsHistory: Array<{ round: number; newsCard: NewsCard; timestamp: number }> = [];
+    // Track price history per second for Decision Replay
+    private priceHistoryBySecond: Map<number, Map<string, number>> = new Map();
+    // Ghost traders (bots with realistic names)
+    private ghostTraders: Array<{ id: string; name: string; behavior: 'cautious' | 'aggressive' | 'balanced' }> = [];
+    
+    // Pool of realistic bot names
+    private readonly BOT_NAMES = [
+        'Jordan', 'Taylor', 'Morgan', 'Casey', 'Riley',
+        'Avery', 'Quinn', 'Skylar', 'Reese', 'Dakota',
+        'Sage', 'River', 'Phoenix', 'Rowan', 'Kai',
+        'Blake', 'Drew', 'Cameron', 'Hayden', 'Peyton'
+    ];
 
     constructor(io: Server) {
         this.io = io;
@@ -153,7 +165,65 @@ export class GameManager {
             };
             this.gameState.players.push(newPlayer);
         }
+        
+        // Add ghost traders if needed (only real players < 2)
+        this.ensureGhostTraders();
         this.broadcastState();
+    }
+
+    private ensureGhostTraders() {
+        const realPlayers = this.gameState.players.filter(p => !this.isGhostPlayer(p.name));
+        const currentBots = this.gameState.players.filter(p => this.isGhostPlayer(p.name));
+        
+        // Dynamic bot addition:
+        // - 1 real player: add 2 bots (3 total) - minimum for competition
+        // - 2 real players: add 1 bot (3 total) - keep it interesting
+        // - 3+ real players: no bots needed - real competition is enough
+        let botsNeeded = 0;
+        if (realPlayers.length === 1) {
+            botsNeeded = 2 - currentBots.length;
+        } else if (realPlayers.length === 2) {
+            botsNeeded = 1 - currentBots.length;
+        }
+        // If 3+ real players, no bots needed
+        
+        botsNeeded = Math.max(0, botsNeeded);
+        
+        if (botsNeeded > 0 && this.ghostTraders.length === 0) {
+            // Shuffle bot names to get random selection
+            const shuffledNames = [...this.BOT_NAMES].sort(() => Math.random() - 0.5);
+            const behaviors: Array<'cautious' | 'aggressive' | 'balanced'> = ['cautious', 'aggressive', 'balanced', 'balanced', 'cautious'];
+            
+            // Create the needed number of bots
+            for (let i = 0; i < botsNeeded; i++) {
+                const botName = shuffledNames[i];
+                const ghost = {
+                    id: `bot-${i + 1}`,
+                    name: botName,
+                    behavior: behaviors[i % behaviors.length]
+                };
+                this.ghostTraders.push(ghost);
+                
+                const ghostPlayer: PlayerState = {
+                    id: ghost.id,
+                    name: ghost.name,
+                    cash: STARTING_CASH,
+                    holdings: [],
+                    riskScore: 0,
+                    powerUps: [],
+                    totalValue: STARTING_CASH,
+                    ready: true,
+                    transactionLog: []
+                };
+                this.gameState.players.push(ghostPlayer);
+            }
+            
+            console.log(`🤖 Added ${botsNeeded} bot trader(s): ${this.ghostTraders.map(g => g.name).join(', ')}`);
+        }
+    }
+    
+    private isGhostPlayer(name: string): boolean {
+        return this.BOT_NAMES.includes(name);
     }
 
     public removePlayer(socketId: string) {
@@ -315,7 +385,13 @@ export class GameManager {
             if (currentFrame > NEWS_PHASE_SECONDS) {
                 // Trading phase - update prices
                 this.updatePricesGameMode(tradingSecondsElapsed);
+                
+                // Ghost traders make decisions
+                this.executeGhostTraderActions(tradingSecondsElapsed);
             }
+            
+            // Track price history for Decision Replay
+            this.trackPriceHistory(currentFrame);
 
             this.calculatePlayerValues();
             this.calculateRisk();
@@ -334,12 +410,152 @@ export class GameManager {
         }, 1000);
     }
 
+    private trackPriceHistory(currentFrame: number) {
+        const priceSnapshot = new Map<string, number>();
+        this.gameState.assets.forEach(asset => {
+            priceSnapshot.set(asset.id, asset.currentPrice);
+        });
+        this.priceHistoryBySecond.set(currentFrame, priceSnapshot);
+    }
+
+    private executeGhostTraderActions(tradingSecondsElapsed: number) {
+        if (!this.currentNewsCard) return;
+        
+        // Ghost traders act at specific intervals (not every second)
+        if (tradingSecondsElapsed % 8 !== 0) return; // Act every 8 seconds
+        
+        this.ghostTraders.forEach(ghost => {
+            const player = this.gameState.players.find(p => p.id === ghost.id);
+            if (!player) return;
+            
+            // Determine action based on behavior and news
+            const sentiment = this.currentNewsCard!.sentiment;
+            const affectedSectors = this.currentNewsCard!.affectedSectors;
+            
+            let shouldBuy = false;
+            let shouldSell = false;
+            
+            if (ghost.behavior === 'aggressive') {
+                // 70% chance to react to news
+                if (Math.random() < 0.7) {
+                    shouldBuy = sentiment.includes('positive');
+                    shouldSell = sentiment.includes('negative');
+                }
+            } else if (ghost.behavior === 'cautious') {
+                // 50% chance to react, prefers selling on bad news
+                if (Math.random() < 0.5) {
+                    shouldBuy = sentiment === 'very_positive';
+                    shouldSell = sentiment.includes('negative');
+                }
+            }
+            
+            // Execute trade
+            if (shouldBuy && player.cash > 500) {
+                // Buy affected asset
+                const affectedAssets = this.getAssetsForSectors(affectedSectors);
+                if (affectedAssets.length > 0) {
+                    const targetAsset = affectedAssets[Math.floor(Math.random() * affectedAssets.length)];
+                    const amount = Math.floor((player.cash * 0.2) / targetAsset.currentPrice); // Invest 20% of cash
+                    if (amount > 0) {
+                        this.executeGhostTrade(player, targetAsset.id, amount, 'BUY');
+                    }
+                }
+            } else if (shouldSell) {
+                // Sell random holding
+                if (player.holdings.length > 0) {
+                    const holding = player.holdings[Math.floor(Math.random() * player.holdings.length)];
+                    const amount = Math.floor(holding.quantity * 0.5); // Sell 50%
+                    if (amount > 0) {
+                        this.executeGhostTrade(player, holding.assetId, amount, 'SELL');
+                    }
+                }
+            } else {
+                // Random small trade (10% chance)
+                if (Math.random() < 0.1 && player.cash > 300) {
+                    const randomAsset = this.gameState.assets[Math.floor(Math.random() * this.gameState.assets.length)];
+                    const amount = Math.floor((player.cash * 0.1) / randomAsset.currentPrice);
+                    if (amount > 0) {
+                        this.executeGhostTrade(player, randomAsset.id, amount, 'BUY');
+                    }
+                }
+            }
+        });
+    }
+
+    private getAssetsForSectors(sectors: string[]): any[] {
+        const assets: any[] = [];
+        sectors.forEach(sector => {
+            const sectorAssets = SECTOR_TO_ASSETS[sector] || [];
+            sectorAssets.forEach(assetId => {
+                const asset = this.gameState.assets.find(a => a.id === assetId);
+                if (asset) assets.push(asset);
+            });
+        });
+        return assets;
+    }
+
+    private executeGhostTrade(player: PlayerState, assetId: string, amount: number, type: 'BUY' | 'SELL') {
+        const asset = this.gameState.assets.find(a => a.id === assetId);
+        if (!asset) return;
+        
+        if (type === 'BUY') {
+            const cost = amount * asset.currentPrice;
+            if (player.cash >= cost) {
+                player.cash -= cost;
+                const holding = player.holdings.find(h => h.assetId === assetId);
+                if (holding) {
+                    const totalCost = (holding.quantity * holding.avgBuyPrice) + cost;
+                    holding.quantity += amount;
+                    holding.avgBuyPrice = totalCost / holding.quantity;
+                } else {
+                    player.holdings.push({ assetId, quantity: amount, avgBuyPrice: asset.currentPrice });
+                }
+                
+                player.transactionLog.push({
+                    round: this.gameState.currentRound,
+                    type: 'BUY',
+                    assetId,
+                    assetType: asset.type,
+                    amount,
+                    price: asset.currentPrice,
+                    totalValue: cost,
+                    eventActive: this.gameState.activeEvent?.id,
+                    sentimentAtTime: this.gameState.sentiment[asset.type]
+                });
+            }
+        } else {
+            const holding = player.holdings.find(h => h.assetId === assetId);
+            if (holding && holding.quantity >= amount) {
+                const revenue = amount * asset.currentPrice;
+                player.cash += revenue;
+                const avgBuyPrice = holding.avgBuyPrice;
+                holding.quantity -= amount;
+                if (holding.quantity <= 0) {
+                    player.holdings = player.holdings.filter(h => h.assetId !== assetId);
+                }
+                
+                player.transactionLog.push({
+                    round: this.gameState.currentRound,
+                    type: 'SELL',
+                    assetId,
+                    assetType: asset.type,
+                    amount,
+                    price: asset.currentPrice,
+                    totalValue: revenue,
+                    eventActive: this.gameState.activeEvent?.id,
+                    sentimentAtTime: this.gameState.sentiment[asset.type],
+                    avgBuyPrice
+                });
+            }
+        }
+    }
+
 
     // ==================== REALISTIC PRICE MOVEMENT ====================
     // Formula: P_new = P_old × (1 + r_base + α × S + ε)
 
     private updatePricesGameMode(tradingSecondsElapsed: number) {
-        const tradingWindowTotal = TOTAL_FRAMES - NEWS_PHASE_SECONDS; // 30 seconds
+        const tradingWindowTotal = TOTAL_FRAMES - NEWS_PHASE_SECONDS; // 25 seconds
 
         this.gameState.assets.forEach(asset => {
             const basePrice = this.roundStartPrices.get(asset.id) || asset.currentPrice;
@@ -359,6 +575,11 @@ export class GameManager {
             // 5. APPLY FORMULA: P_new = P_old × (1 + r_base + α × S + ε)
             const priceChange = r_base + (alpha * S) + epsilon;
             let newPrice = asset.currentPrice * (1 + priceChange);
+            
+            // Debug logging for crypto assets in first few seconds
+            if (tradingSecondsElapsed <= 2 && asset.type === 'CRYPTO' && Math.random() < 0.2) {
+                console.log(`   [${asset.id}] Price update: r_base=${r_base}, S=${S}, alpha=${alpha}, epsilon=${epsilon.toFixed(4)}, change=${priceChange.toFixed(4)}, old=${asset.currentPrice.toFixed(2)}, new=${newPrice.toFixed(2)}`);
+            }
             
             // 6. SAFETY RAILS - Prevent extreme moves
             const maxPrice = basePrice * (1 + MAX_ROUND_MOVE_PERCENT);
@@ -410,7 +631,14 @@ export class GameManager {
         }
         
         // Final sentiment score: S = baseSentiment × impactWeight × timeDecay
-        return baseSentiment * impactWeight * timeDecay;
+        const finalScore = baseSentiment * impactWeight * timeDecay;
+        
+        // Debug logging for first few seconds
+        if (tradingSecondsElapsed <= 2 && Math.random() < 0.1) {
+            console.log(`   [${asset.id}] Sentiment calc: base=${baseSentiment}, weight=${impactWeight}, decay=${timeDecay}, final=${finalScore}`);
+        }
+        
+        return finalScore;
     }
 
     // Generate random noise (ε) with Gaussian-like distribution
@@ -593,6 +821,7 @@ export class GameManager {
             const slippage = this.calculateSlippage(amount, asset.currentPrice);
             const effectivePrice = asset.currentPrice * (1 - slippage);
             const revenue = amount * effectivePrice;
+            const avgBuyPrice = holding.avgBuyPrice;
 
             player.cash += revenue;
             holding.quantity -= amount;
@@ -609,7 +838,8 @@ export class GameManager {
                 price: effectivePrice,
                 totalValue: revenue,
                 eventActive: this.gameState.activeEvent?.id,
-                sentimentAtTime: this.gameState.sentiment[asset.type]
+                sentimentAtTime: this.gameState.sentiment[asset.type],
+                avgBuyPrice
             });
 
             this.broadcastState();
@@ -659,6 +889,9 @@ export class GameManager {
 
     private async calculateResults() {
         const results = await Promise.all(this.gameState.players.map(async player => {
+            // Skip bot traders in results (they're just for competition)
+            if (this.isGhostPlayer(player.name)) return null;
+            
             const initialValue = STARTING_CASH;
             let finalValue = player.totalValue;
 
@@ -670,7 +903,9 @@ export class GameManager {
             }
 
             const roi = ((finalValue - initialValue) / initialValue) * 100;
-            const riskAdjustedScore = roi - (player.riskScore * 0.5);
+            // Risk-adjusted score: penalize high risk but not too harshly
+            // Use a smaller multiplier (0.2 instead of 0.5) so risk doesn't dominate
+            const riskAdjustedScore = roi - (player.riskScore * 0.2);
 
             let analysis;
             try {
@@ -685,6 +920,9 @@ export class GameManager {
                 analysis = this.generateEnhancedHeuristicAnalysis(player, context);
             }
 
+            // Generate Decision Replay
+            const decisionReplay = this.generateDecisionReplay(player);
+
             return {
                 playerId: player.id,
                 playerName: player.name,
@@ -695,12 +933,168 @@ export class GameManager {
                 rank: 0,
                 insights: analysis.playerSummary.whatYouDidWell.concat(analysis.playerSummary.mistakesAndOpportunities),
                 playerSummary: analysis.playerSummary,
-                learningCards: analysis.learningCards
+                learningCards: analysis.learningCards,
+                decisionReplay
             };
         }));
 
-        return results.sort((a, b) => b.riskAdjustedScore - a.riskAdjustedScore)
-            .map((result, index) => ({ ...result, rank: index + 1 }));
+        // Filter out bots and sort by risk-adjusted score (highest wins)
+        // Winner = Best balance of returns (ROI) and risk management
+        // Formula: Score = ROI - (Risk × 0.2)
+        return results
+            .filter(r => r !== null)
+            .sort((a, b) => b!.riskAdjustedScore - a!.riskAdjustedScore)
+            .map((result, index) => ({ ...result!, rank: index + 1 }));
+    }
+
+    private generateDecisionReplay(player: PlayerState): any {
+        const trades = player.transactionLog;
+        if (trades.length === 0) {
+            return {
+                hasReplay: false,
+                message: 'No trades made - no replay available'
+            };
+        }
+
+        // Find the most significant trade (highest value)
+        const significantTrade = trades.reduce((max, trade) => 
+            trade.totalValue > max.totalValue ? trade : max
+        , trades[0]);
+
+        // Get the news for that round
+        const newsForRound = this.roundNewsHistory.find(rn => rn.round === significantTrade.round);
+        if (!newsForRound) {
+            return { hasReplay: false, message: 'No news data available' };
+        }
+
+        // Calculate when news appeared (always at 5 seconds)
+        const newsTimestamp = 5;
+        
+        // Estimate when player traded (we don't have exact timestamp, so estimate mid-round)
+        // Trading phase is 55 seconds, estimate player traded around 15-30 seconds
+        const estimatedTradeTime = 20; // seconds from round start
+        
+        // Simulate alternative scenarios
+        const alternatives = this.simulateAlternativeTiming(
+            significantTrade,
+            newsTimestamp,
+            estimatedTradeTime
+        );
+
+        if (!alternatives) {
+            return { hasReplay: false, message: 'Could not simulate alternatives' };
+        }
+
+        return {
+            hasReplay: true,
+            tradeAnalyzed: {
+                type: significantTrade.type,
+                asset: significantTrade.assetId,
+                amount: significantTrade.amount,
+                price: significantTrade.price,
+                round: significantTrade.round
+            },
+            newsContext: {
+                title: newsForRound.newsCard.title,
+                sentiment: newsForRound.newsCard.sentiment,
+                appearedAt: newsTimestamp
+            },
+            actualOutcome: {
+                tradeTime: estimatedTradeTime,
+                profit: alternatives.actualProfit,
+                profitPercent: alternatives.actualProfitPercent
+            },
+            bestAlternative: alternatives.bestAlternative,
+            message: alternatives.message
+        };
+    }
+
+    private simulateAlternativeTiming(
+        trade: Transaction,
+        newsTime: number,
+        estimatedTradeTime: number
+    ): any {
+        // Get price history for this round
+        const roundStart = (trade.round - 1) * TOTAL_FRAMES;
+        
+        // Calculate actual profit (simplified - using final round price)
+        const finalPriceFrame = trade.round * TOTAL_FRAMES;
+        const finalPriceSnapshot = this.priceHistoryBySecond.get(finalPriceFrame);
+        if (!finalPriceSnapshot) return null;
+        
+        const finalPrice = finalPriceSnapshot.get(trade.assetId);
+        if (!finalPrice) return null;
+
+        let actualProfit = 0;
+        let actualProfitPercent = 0;
+        
+        if (trade.type === 'BUY') {
+            actualProfit = (finalPrice - trade.price) * trade.amount;
+            actualProfitPercent = ((finalPrice - trade.price) / trade.price) * 100;
+        } else {
+            // For SELL, profit is already realized
+            const avgBuyPrice = trade.avgBuyPrice || trade.price;
+            actualProfit = trade.totalValue - (trade.amount * avgBuyPrice);
+            actualProfitPercent = ((trade.price - avgBuyPrice) / avgBuyPrice) * 100;
+        }
+
+        // Simulate alternative timings (±5, ±10 seconds)
+        const alternativeTimes = [
+            estimatedTradeTime - 10,
+            estimatedTradeTime - 5,
+            estimatedTradeTime + 5,
+            estimatedTradeTime + 10
+        ].filter(t => t >= newsTime && t <= TOTAL_FRAMES);
+
+        let bestAlternative: any = null;
+        let bestProfit = actualProfit;
+
+        alternativeTimes.forEach(altTime => {
+            const altFrame = roundStart + altTime;
+            const altPriceSnapshot = this.priceHistoryBySecond.get(altFrame);
+            if (!altPriceSnapshot) return;
+            
+            const altPrice = altPriceSnapshot.get(trade.assetId);
+            if (!altPrice) return;
+
+            let altProfit = 0;
+            if (trade.type === 'BUY') {
+                altProfit = (finalPrice - altPrice) * trade.amount;
+            } else {
+                const avgBuyPrice = trade.avgBuyPrice || trade.price;
+                altProfit = (altPrice - avgBuyPrice) * trade.amount;
+            }
+
+            if (Math.abs(altProfit) > Math.abs(bestProfit)) {
+                const timeDiff = altTime - estimatedTradeTime;
+                bestProfit = altProfit;
+                bestAlternative = {
+                    timing: altTime,
+                    timeDifference: timeDiff,
+                    price: altPrice,
+                    profit: altProfit,
+                    profitPercent: ((altProfit / trade.totalValue) * 100).toFixed(1)
+                };
+            }
+        });
+
+        let message = '';
+        if (bestAlternative && Math.abs(bestAlternative.profit - actualProfit) > 50) {
+            const direction = bestAlternative.timeDifference < 0 ? 'earlier' : 'later';
+            const seconds = Math.abs(bestAlternative.timeDifference);
+            const better = bestAlternative.profit > actualProfit ? 'higher' : 'lower';
+            
+            message = `If you had ${trade.type === 'BUY' ? 'bought' : 'sold'} ${trade.assetId} ${seconds} seconds ${direction}, your profit would be ${better} by $${Math.abs(bestAlternative.profit - actualProfit).toFixed(2)}.`;
+        } else {
+            message = `Your timing was good! Alternative timings wouldn't have significantly improved your outcome.`;
+        }
+
+        return {
+            actualProfit: actualProfit.toFixed(2),
+            actualProfitPercent: actualProfitPercent.toFixed(1),
+            bestAlternative,
+            message
+        };
     }
 
     private async generateGeminiAnalysis(player: PlayerState): Promise<{ playerSummary: any, learningCards: any[] }> {
@@ -940,6 +1334,8 @@ Return ONLY valid JSON with this structure:
         this.lastRoundSentiment = 'neutral';
         this.consecutiveSameSentiment = 0;
         this.roundNewsHistory = []; // Clear news history
+        this.priceHistoryBySecond.clear(); // Clear price history
+        this.ghostTraders = []; // Clear ghost traders
 
         // Restore players with reset stats
         this.gameState.players = existingPlayers.map(p => ({

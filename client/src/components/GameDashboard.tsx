@@ -133,6 +133,57 @@ export const GameDashboard: React.FC = () => {
                                             </div>
                                         </div>
                                     )}
+
+                                    {/* Decision Replay (Only for me) */}
+                                    {result.playerName === playerName && result.decisionReplay?.hasReplay && (
+                                        <div className="mt-4 bg-gradient-to-r from-purple-900/30 to-blue-900/30 p-4 rounded border border-purple-500">
+                                            <h3 className="text-purple-400 font-bold mb-2 flex items-center gap-2">
+                                                🔁 Decision Replay - What If?
+                                            </h3>
+                                            
+                                            <div className="text-sm text-gray-300 mb-3">
+                                                <div className="mb-2">
+                                                    <span className="text-gray-400">Analyzed Trade:</span>{' '}
+                                                    <span className="font-bold text-white">
+                                                        {result.decisionReplay.tradeAnalyzed?.type} {result.decisionReplay.tradeAnalyzed?.amount.toFixed(2)} {result.decisionReplay.tradeAnalyzed?.asset}
+                                                    </span>
+                                                    {' '}@ ${result.decisionReplay.tradeAnalyzed?.price.toFixed(2)}
+                                                </div>
+                                                
+                                                <div className="mb-2 text-xs bg-black/30 p-2 rounded">
+                                                    <span className="text-yellow-400">📰 News:</span> {result.decisionReplay.newsContext?.title}
+                                                    <br />
+                                                    <span className="text-gray-500">Appeared at {result.decisionReplay.newsContext?.appearedAt}s</span>
+                                                </div>
+                                            </div>
+
+                                            <div className="bg-black/40 p-3 rounded mb-2">
+                                                <div className="text-xs text-gray-400 mb-1">Your Outcome:</div>
+                                                <div className="font-mono text-lg">
+                                                    Profit: <span className={parseFloat(result.decisionReplay.actualOutcome?.profit || '0') >= 0 ? 'text-green-400' : 'text-red-400'}>
+                                                        ${result.decisionReplay.actualOutcome?.profit}
+                                                    </span>
+                                                    {' '}({result.decisionReplay.actualOutcome?.profitPercent}%)
+                                                </div>
+                                            </div>
+
+                                            {result.decisionReplay.bestAlternative && (
+                                                <div className="bg-purple-900/40 p-3 rounded border border-purple-600">
+                                                    <div className="text-xs text-purple-300 mb-1">Alternative Scenario:</div>
+                                                    <div className="font-mono text-sm text-white">
+                                                        {result.decisionReplay.bestAlternative.timeDifference < 0 ? '⏪' : '⏩'} {Math.abs(result.decisionReplay.bestAlternative.timeDifference)}s {result.decisionReplay.bestAlternative.timeDifference < 0 ? 'earlier' : 'later'}
+                                                        {' '}→ Profit: <span className={result.decisionReplay.bestAlternative.profit >= 0 ? 'text-green-400' : 'text-red-400'}>
+                                                            ${result.decisionReplay.bestAlternative.profit.toFixed(2)}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            <div className="mt-3 text-sm text-purple-200 italic">
+                                                💡 {result.decisionReplay.message}
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             ))}
                         </div>
@@ -277,15 +328,19 @@ export const GameDashboard: React.FC = () => {
                     <div className="bg-theme-surface rounded p-2 border border-gray-800 max-h-[120px] overflow-y-auto flex-shrink-0">
                         <h2 className="text-xs font-bold mb-1 text-gray-300">Leaderboard</h2>
                         <ul className="space-y-0.5">
-                            {sortedPlayers.map((p, idx) => (
-                                <li key={p.id} className={`flex justify-between items-center p-1 rounded text-xs ${p.id === me?.id ? 'bg-theme-surface-highlight border border-neon-blue' : ''}`}>
-                                    <div className="flex items-center gap-1">
-                                        <span className="text-gray-500 font-mono">#{idx + 1}</span>
-                                        <span className="font-medium truncate max-w-[50px]">{p.name}</span>
-                                    </div>
-                                    <span className="font-mono">${p.totalValue.toFixed(0)}</span>
-                                </li>
-                            ))}
+                            {sortedPlayers.map((p, idx) => {
+                                // Check if this is a bot (realistic name, no special prefix)
+                                const isBot = !p.powerUps || p.powerUps.length === 0;
+                                return (
+                                    <li key={p.id} className={`flex justify-between items-center p-1 rounded text-xs ${p.id === me?.id ? 'bg-theme-surface-highlight border border-neon-blue' : ''}`}>
+                                        <div className="flex items-center gap-1">
+                                            <span className="text-gray-500 font-mono">#{idx + 1}</span>
+                                            <span className={`font-medium truncate max-w-[50px] ${isBot ? 'text-gray-400 italic' : ''}`}>{p.name}</span>
+                                        </div>
+                                        <span className="font-mono">${p.totalValue.toFixed(0)}</span>
+                                    </li>
+                                );
+                            })}
                         </ul>
                     </div>
 
