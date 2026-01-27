@@ -194,6 +194,10 @@ export class GameManager {
             const shuffledNames = [...this.BOT_NAMES].sort(() => Math.random() - 0.5);
             const behaviors: Array<'cautious' | 'aggressive' | 'balanced'> = ['cautious', 'aggressive', 'balanced', 'balanced', 'cautious'];
             
+            // Random avatars and strategies for bots
+            const avatarIds: AvatarId[] = ['ANALYST', 'DEGEN', 'STRATEGIST', 'MEME_LORD'];
+            const strategyIds: StrategyId[] = ['HIGH_ROLLER', 'SAFETY_FIRST', 'DIVERSIFIER', 'SWING_TRADER'];
+            
             // Create the needed number of bots
             for (let i = 0; i < botsNeeded; i++) {
                 const botName = shuffledNames[i];
@@ -213,7 +217,10 @@ export class GameManager {
                     powerUps: [],
                     totalValue: STARTING_CASH,
                     ready: true,
-                    transactionLog: []
+                    transactionLog: [],
+                    // Give bots random avatar and strategy so they don't block progression
+                    avatarId: avatarIds[Math.floor(Math.random() * avatarIds.length)],
+                    strategyId: strategyIds[Math.floor(Math.random() * strategyIds.length)]
                 };
                 this.gameState.players.push(ghostPlayer);
             }
